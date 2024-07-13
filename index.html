@@ -237,30 +237,1009 @@
                 document.getElementById('werbepakete-form').onsubmit = handleFormSubmit;
             };
         }
+
+        // Existing functions and code for handling other parts of the application
+        const slotPackages = {
+            "Basis": {"price": 250, "seconds_per_day": 600, "insertions_per_day": 60, "insertion_duration": 10},
+            "Standard": {"price": 450, "seconds_per_day": 1200, "insertions_per_day": 120, "insertion_duration": 10},
+            "Premium": {"price": 700, "seconds_per_day": 3600, "insertions_per_day": 240, "insertion_duration": 15},
+        };
+        
+        const maxSecondsPerDay = 39600;  // 11 hours per day
+        const maxDaysPerMonth = 24;  // 6 days per week * 4 weeks per month
+        const maxSecondsPerMonth = maxSecondsPerDay * maxDaysPerMonth; // 39600 * 24 = 950400
+
+        let totalUsedSecondsPerMonth = {};
+        let revenuePerMonth = {};
+        let allBookings = [];
+        let archivedBookings = [];
+        let originalRevenuePerMonth = {};
+        let currentEntry = null;
+        let currentEditEntry = null;
+        let editingEntry = null;
+        let currentNotesTarget = null;
+
+        document.getElementById('package').addEventListener('change', function() {
+            const customPackageDiv = document.getElementById('custom-package');
+            if (this.value === 'Sonstiges') {
+                customPackageDiv.style.display = 'block';
+            } else {
+                customPackageDiv.style.display = 'none';
+            }
+        });
+
+        document.getElementById('werbepakete-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            if (editingEntry) {
+                updateBooking();
+            } else {
+                addBooking();
+            }
+        });
+
+        document.getElementById('firm_name').addEventListener('input', function() {
+            const input = this.value.toLowerCase();
+            const suggestionsContainer = document.getElementById('firm-name-suggestions');
+            suggestionsContainer.innerHTML = '';
+
+            const filteredSuggestions = [...new Set(allBookings.map(booking => booking.firmName))]
+                .filter(firmName => firmName.toLowerCase().includes(input) && !archivedBookings.some(archive => archive.firmName === firmName))
+                .sort();
+
+            filteredSuggestions.forEach(firmName => {
+                const suggestionItem = document.createElement('div');
+                suggestionItem.classList.add('suggestion');
+                suggestionItem.textContent = firmName;
+                suggestionItem.addEventListener('click', function() {
+                    document.getElementById('firm_name').value = firmName;
+                    suggestionsContainer.innerHTML = '';
+                });
+                suggestionsContainer.appendChild(suggestionItem);
+            });
+        });
+
+        function addBooking() {
+            const firmName = document.getElementById('firm_name').value;
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            const packageType = document.getElementById('package').value;
+            const paymentMethod = document.getElementById('payment_method').value;
+            const discount = parseFloat(document.getElementById('discount').value);
+
+            let pricePerMonth, secondsPerDay;
+            if (packageType === 'Sonstiges') {
+                pricePerMonth = parseFloat(document.getElementById('custom_price').value);
+                secondsPerDay = parseFloat(document.getElementById('custom_seconds').value);
+            } else {
+                pricePerMonth = slotPackages[packageType].price;
+                secondsPerDay = slotPackages[packageType].seconds_per_day;
+            }
+            
+            const discountedPricePerMonth = pricePerMonth * (1 - discount / 100);
+
+            const monthsRange = getMonthsRange(startDate, endDate);
+
+            const totalCost = discountedPricePerMonth * monthsRange.length;
+            
+            const bookingRow = document.createElement('tr');
+            bookingRow.innerHTML = `
+                <td>${firmName}</td>
+                <td>${startDate}</td>
+                <td>${endDate}</td>
+                <td>${packageType}</td>
+                <td>${paymentMethod}</td>
+                <td class="unpaid">Nein</td>
+                <td>${totalCost.toFixed(2)} €</td>
+                <td>
+                    <button class="icon-button" onclick="showConfirmPopup(this)"><i class="fas fa-euro-sign"></i></button>
+                    <button class="icon-button" onclick="confirmDeleteBooking(this)"><i class="fas fa-trash"></i></button>
+                    <button class="icon-button" onclick="showEditConfirmPopup(this)"><i class="fas fa-edit"></i></button>
+                    <button class="icon-button" onclick="showNotesPopup(this, '${firmName}-${startDate}')"><i class="fas fa-info"></i></button>
+                </td>
+            `;
+            document.querySelector('#bookings-table tbody').prepend(bookingRow);
+
+            monthsRange.forEach(month => {
+                const monthStr = month.toLocaleString('default', { month: 'long' }) + ' ' + month.getFullYear();
+                if (!totalUsedSecondsPerMonth[monthStr]) {
+                    totalUsedSecondsPerMonth[monthStr] = 0;
+                }
+                totalUsedSecondsPerMonth[monthStr] += secondsPerDay * maxDaysPerMonth;
+
+                if (!revenuePerMonth[monthStr]) {
+                    revenuePerMonth[monthStr] = 0;
+                }
+                revenuePerMonth[monthStr] += discountedPricePerMonth;
+            });
+
+            allBookings.unshift({
+                firmName,
+                startDate,
+                endDate,
+                packageType,
+                paymentMethod,
+                paymentStatus: 'Nein',
+                pricePerMonth: discountedPricePerMonth,
+                secondsPerDay,
+                totalCost,
+                discount // Rabatt speichern
+            });
+
+            originalRevenuePerMonth = { ...revenuePerMonth };
+
+            updateFirmFilter();
+            updateFirmNameSuggestions();
+            updateChart();
+            updateRevenueTable();
+            filterBookings();
+
+            // Reset form
+            document.getElementById('werbepakete-form').reset();
+            document.getElementById('custom-package').style.display = 'none';
+        }
+
+        function updateBooking() {
+            const firmName = document.getElementById('firm_name').value;
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            const packageType = document.getElementById('package').value;
+            const paymentMethod = document.getElementById('payment_method').value;
+            const discount = parseFloat(document.getElementById('discount').value);
+
+            let pricePerMonth, secondsPerDay;
+            if (packageType === 'Sonstiges') {
+                pricePerMonth = parseFloat(document.getElementById('custom_price').value);
+                secondsPerDay = parseFloat(document.getElementById('custom_seconds').value);
+            } else {
+                pricePerMonth = slotPackages[packageType].price;
+                secondsPerDay = slotPackages[packageType].seconds_per_day;
+            }
+
+            const discountedPricePerMonth = pricePerMonth * (1 - discount / 100);
+            const monthsRange = getMonthsRange(startDate, endDate);
+            const totalCost = discountedPricePerMonth * monthsRange.length;
+
+            // Ursprüngliche Buchung zurücksetzen
+            const originalStartDate = new Date(editingEntry.startDate + '-01');
+            const originalEndDate = new Date(editingEntry.endDate + '-01');
+            const originalMonthsRange = getMonthsRange(originalStartDate, originalEndDate);
+
+            originalMonthsRange.forEach(month => {
+                const monthStr = month.toLocaleString('default', { month: 'long' }) + ' ' + month.getFullYear();
+                totalUsedSecondsPerMonth[monthStr] -= editingEntry.secondsPerDay * maxDaysPerMonth;
+                revenuePerMonth[monthStr] -= editingEntry.pricePerMonth;
+            });
+
+            // Neue Buchung hinzufügen
+            monthsRange.forEach(month => {
+                const monthStr = month.toLocaleString('default', { month: 'long' }) + ' ' + month.getFullYear();
+                if (!totalUsedSecondsPerMonth[monthStr]) {
+                    totalUsedSecondsPerMonth[monthStr] = 0;
+                }
+                totalUsedSecondsPerMonth[monthStr] += secondsPerDay * maxDaysPerMonth;
+
+                if (!revenuePerMonth[monthStr]) {
+                    revenuePerMonth[monthStr] = 0;
+                }
+                revenuePerMonth[monthStr] += discountedPricePerMonth;
+            });
+
+            editingEntry.firmName = firmName;
+            editingEntry.startDate = startDate;
+            editingEntry.endDate = endDate;
+            editingEntry.packageType = packageType;
+            editingEntry.paymentMethod = paymentMethod;
+            editingEntry.pricePerMonth = discountedPricePerMonth;
+            editingEntry.secondsPerDay = secondsPerDay;
+            editingEntry.totalCost = totalCost;
+            editingEntry.discount = discount;
+
+            originalRevenuePerMonth = { ...revenuePerMonth };
+
+            updateFirmFilter();
+            updateFirmNameSuggestions();
+            updateChart();
+            updateRevenueTable();
+            filterBookings();
+
+            // Reset form
+            document.getElementById('werbepakete-form').reset();
+            document.getElementById('custom-package').style.display = 'none';
+            editingEntry = null;
+        }
+
+        function updateFirmFilter() {
+            const firmFilter = document.getElementById('filter_firm');
+            firmFilter.innerHTML = '<option value="all">Alle</option>';
+            const firms = new Set(allBookings.map(booking => booking.firmName));
+            firms.forEach(firm => {
+                const option = document.createElement('option');
+                option.value = firm;
+                option.textContent = firm;
+                firmFilter.appendChild(option);
+            });
+
+            const bookingFirmFilter = document.getElementById('booking_filter_firm');
+            bookingFirmFilter.innerHTML = '<option value="all">Alle</option>';
+            firms.forEach(firm => {
+                const option = document.createElement('option');
+                option.value = firm;
+                option.textContent = firm;
+                bookingFirmFilter.appendChild(option);
+            });
+        }
+
+        function updateFirmNameSuggestions() {
+            const firmNameInput = document.getElementById('firm_name');
+            firmNameInput.addEventListener('input', function() {
+                const input = this.value.toLowerCase();
+                const suggestionsContainer = document.getElementById('firm-name-suggestions');
+                suggestionsContainer.innerHTML = '';
+
+                const filteredSuggestions = [...new Set(allBookings.map(booking => booking.firmName))]
+                    .filter(firmName => firmName.toLowerCase().includes(input) && !archivedBookings.some(archive => archive.firmName === firmName))
+                    .sort();
+
+                filteredSuggestions.forEach(firmName => {
+                    const suggestionItem = document.createElement('div');
+                    suggestionItem.classList.add('suggestion');
+                    suggestionItem.textContent = firmName;
+                    suggestionItem.addEventListener('click', function() {
+                        firmNameInput.value = firmName;
+                        suggestionsContainer.innerHTML = '';
+                    });
+                    suggestionsContainer.appendChild(suggestionItem);
+                });
+            });
+        }
+
+        function showConfirmPopup(button) {
+            currentEntry = button;
+            document.getElementById('confirm-popup').classList.add('active');
+        }
+
+        function closeConfirmPopup() {
+            document.getElementById('confirm-popup').classList.remove('active');
+            currentEntry = null;
+        }
+
+        function confirmChangeStatus() {
+            const button = currentEntry;
+            const row = button.parentElement.parentElement;
+            const cells = row.children;
+            const paymentStatusCell = cells[5];
+            const newStatus = paymentStatusCell.textContent === 'Ja' ? 'Nein' : 'Ja';
+            paymentStatusCell.textContent = newStatus;
+            paymentStatusCell.className = newStatus === 'Nein' ? 'unpaid' : 'paid';
+
+            const firmName = cells[0].textContent;
+            const booking = allBookings.find(b => b.firmName === firmName && b.startDate === cells[1].textContent);
+            if (booking) {
+                booking.paymentStatus = newStatus;
+            }
+
+            closeConfirmPopup();
+        }
+
+        function showEditConfirmPopup(button) {
+            currentEditEntry = button;
+            document.getElementById('edit-confirm-popup').classList.add('active');
+        }
+
+        function closeEditConfirmPopup() {
+            document.getElementById('edit-confirm-popup').classList.remove('active');
+            currentEditEntry = null;
+        }
+
+        function confirmEditBooking() {
+            const button = currentEditEntry;
+            const row = button.parentElement.parentElement;
+            const cells = row.children;
+
+            document.getElementById('firm_name').value = cells[0].textContent;
+            document.getElementById('start_date').value = cells[1].textContent;
+            document.getElementById('end_date').value = cells[2].textContent;
+            document.getElementById('package').value = cells[3].textContent;
+            document.getElementById('payment_method').value = cells[4].textContent;
+
+            const totalCost = parseFloat(cells[6].textContent);
+            const months = getMonthsRange(new Date(cells[1].textContent + '-01'), new Date(cells[2].textContent + '-01')).length;
+            const originalPricePerMonth = totalCost / months;
+            const discount = allBookings.find(b => b.firmName === cells[0].textContent && b.startDate === cells[1].textContent).discount;
+            document.getElementById('discount').value = discount.toFixed(2);
+
+            if (cells[3].textContent === 'Sonstiges') {
+                document.getElementById('custom-package').style.display = 'block';
+                document.getElementById('custom_price').value = originalPricePerMonth;
+                document.getElementById('custom_seconds').value = parseInt(cells[7].textContent);
+            } else {
+                document.getElementById('custom-package').style.display = 'none';
+            }
+
+            editingEntry = allBookings.find(b => b.firmName === cells[0].textContent && b.startDate === cells[1].textContent);
+
+            row.remove();
+            updateChart();
+            updateRevenueTable();
+            filterBookings();
+
+            closeEditConfirmPopup();
+
+            // Scroll to form and highlight
+            document.getElementById('werbepakete-form').scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('werbepakete-form').classList.add('highlight');
+            setTimeout(() => {
+                document.getElementById('werbepakete-form').classList.remove('highlight');
+            }, 2000);
+        }
+
+        function confirmDeleteBooking(button) {
+            if (confirm("Sicher, dass Sie die Buchung löschen wollen?")) {
+                deleteBooking(button);
+            }
+        }
+
+        function deleteBooking(button) {
+            const row = button.parentElement.parentElement;
+            const cells = row.children;
+            const startDate = new Date(cells[1].textContent + '-01');
+            const endDate = new Date(cells[2].textContent + '-01');
+            const secondsPerDay = parseInt(cells[7].textContent);
+
+            const monthsRange = getMonthsRange(startDate, endDate);
+
+            monthsRange.forEach(month => {
+                const monthStr = month.toLocaleString('default', { month: 'long' }) + ' ' + month.getFullYear();
+                totalUsedSecondsPerMonth[monthStr] -= secondsPerDay * maxDaysPerMonth;
+                revenuePerMonth[monthStr] -= parseFloat(cells[5].textContent);
+            });
+
+            const firmName = cells[0].textContent;
+            const deletedBooking = allBookings.find(b => b.firmName === firmName && b.startDate === cells[1].textContent);
+            archivedBookings.push(deletedBooking);
+            allBookings = allBookings.filter(b => !(b.firmName === firmName && b.startDate === cells[1].textContent));
+
+            row.remove();
+            updateChart();
+            updateRevenueTable();
+            updateArchive();
+            filterBookings();
+        }
+
+        function updateArchive() {
+            const archive = document.getElementById('archive');
+            archive.innerHTML = '';
+
+            const itemsPerPage = 10;
+            const totalPages = Math.ceil(archivedBookings.length / itemsPerPage);
+
+            let currentPage = 1;
+
+            function renderPage(page) {
+                archive.innerHTML = '';
+                const startIndex = (page - 1) * itemsPerPage;
+                const endIndex = startIndex + itemsPerPage;
+                const paginatedBookings = archivedBookings.slice(startIndex, endIndex);
+
+                paginatedBookings.forEach((booking, index) => {
+                    const archiveRow = document.createElement('div');
+                    archiveRow.innerHTML = `
+                        ${booking.firmName} (${booking.startDate} - ${booking.endDate}) - ${booking.packageType} 
+                        <span class="archive-link" onclick="restoreBooking(${index + startIndex})">Wiederherstellen</span>
+                    `;
+                    archive.appendChild(archiveRow);
+                });
+            }
+
+            function renderPagination() {
+                const pagination = document.getElementById('deleted-pagination');
+                pagination.innerHTML = '';
+
+                for (let i = 1; i <= totalPages; i++) {
+                    const pageLink = document.createElement('button');
+                    pageLink.textContent = i;
+                    if (i === currentPage) {
+                        pageLink.disabled = true;
+                    } else {
+                        pageLink.addEventListener('click', () => {
+                            currentPage = i;
+                            renderPage(currentPage);
+                            renderPagination();
+                        });
+                    }
+                    pagination.appendChild(pageLink);
+                }
+            }
+
+            renderPage(currentPage);
+            renderPagination();
+        }
+
+        function restoreBooking(index) {
+            const booking = archivedBookings[index];
+            allBookings.push(booking);
+
+            archivedBookings.splice(index, 1);
+
+            const startDate = new Date(booking.startDate + '-01');
+            const endDate = new Date(booking.endDate + '-01');
+            const monthsRange = getMonthsRange(startDate, endDate);
+
+            monthsRange.forEach(month => {
+                const monthStr = month.toLocaleString('default', { month: 'long' }) + ' ' + month.getFullYear();
+                if (!totalUsedSecondsPerMonth[monthStr]) {
+                    totalUsedSecondsPerMonth[monthStr] = 0;
+                }
+                totalUsedSecondsPerMonth[monthStr] += booking.secondsPerDay * maxDaysPerMonth;
+
+                if (!revenuePerMonth[monthStr]) {
+                    revenuePerMonth[monthStr] = 0;
+                }
+                revenuePerMonth[monthStr] += booking.pricePerMonth;
+            });
+
+            updateChart();
+            updateRevenueTable();
+            updateArchive();
+            filterBookings();
+        }
+
+        function filterBookings() {
+            const startDateValue = document.getElementById('booking_filter_start_date').value;
+            const endDateValue = document.getElementById('booking_filter_end_date').value;
+            const firmFilter = document.getElementById('booking_filter_firm').value;
+
+            const startDate = startDateValue ? new Date(startDateValue + '-01') : null;
+            const endDate = endDateValue ? new Date(endDateValue + '-01') : null;
+
+            const filteredBookings = allBookings.filter(booking => {
+                const bookingStartDate = new Date(booking.startDate + '-01');
+                const bookingEndDate = new Date(booking.endDate + '-01');
+                const isWithinDateRange = (!startDate || bookingEndDate >= startDate) &&
+                                          (!endDate || bookingStartDate <= endDate);
+                const isFirmMatch = firmFilter === 'all' || booking.firmName === firmFilter;
+                return isWithinDateRange && isFirmMatch;
+            });
+
+            displayBookings(filteredBookings, 1);
+        }
+
+        function displayBookings(bookings, page) {
+            const bookingsTableBody = document.querySelector('#bookings-table tbody');
+            bookingsTableBody.innerHTML = '';
+
+            const bookingsPerPage = 10;
+            const startIndex = (page - 1) * bookingsPerPage;
+            const endIndex = startIndex + bookingsPerPage;
+            const paginatedBookings = bookings.slice(startIndex, endIndex);
+
+            paginatedBookings.forEach(booking => {
+                const bookingRow = document.createElement('tr');
+                bookingRow.innerHTML = `
+                    <td>${booking.firmName}</td>
+                    <td>${booking.startDate}</td>
+                    <td>${booking.endDate}</td>
+                    <td>${booking.packageType}</td>
+                    <td>${booking.paymentMethod}</td>
+                    <td class="${booking.paymentStatus === 'Nein' ? 'unpaid' : 'paid'}">${booking.paymentStatus}</td>
+                    <td>${booking.totalCost.toFixed(2)} €</td>
+                    <td>
+                        <button class="icon-button" onclick="showConfirmPopup(this)"><i class="fas fa-euro-sign"></i></button>
+                        <button class="icon-button" onclick="confirmDeleteBooking(this)"><i class="fas fa-trash"></i></button>
+                        <button class="icon-button" onclick="showEditConfirmPopup(this)"><i class="fas fa-edit"></i></button>
+                        <button class="icon-button" onclick="showNotesPopup(this, '${booking.firmName}-${booking.startDate}')"><i class="fas fa-info"></i></button>
+                    </td>
+                `;
+                bookingsTableBody.appendChild(bookingRow);
+            });
+
+            updatePagination(bookings.length, page);
+        }
+
+        function updatePagination(totalBookings, currentPage) {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            const bookingsPerPage = 10;
+            const totalPages = Math.ceil(totalBookings / bookingsPerPage);
+
+            for (let i = 1; i <= totalPages; i++) {
+                const pageLink = document.createElement('button');
+                pageLink.textContent = i;
+                if (i === currentPage) {
+                    pageLink.disabled = true;
+                } else {
+                    pageLink.addEventListener('click', () => displayBookings(allBookings, i));
+                }
+                pagination.appendChild(pageLink);
+            }
+        }
+
+        function resetBookingFilter() {
+            document.getElementById('booking_filter_start_date').value = '';
+            document.getElementById('booking_filter_end_date').value = '';
+            document.getElementById('booking_filter_firm').value = 'all';
+            filterBookings();
+        }
+
+        function sortBookings() {
+            const sortBy = document.getElementById('sort_entries').value;
+            switch (sortBy) {
+                case 'date_asc':
+                    allBookings.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+                    break;
+                case 'date_desc':
+                    allBookings.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+                    break;
+                case 'manufacturer':
+                    allBookings.sort((a, b) => a.firmName.localeCompare(b.firmName));
+                    break;
+                case 'paid':
+                    allBookings.sort((a, b) => b.paymentStatus.localeCompare(a.paymentStatus));
+                    break;
+                case 'unpaid':
+                    allBookings.sort((a, b) => a.paymentStatus.localeCompare(b.paymentStatus));
+                    break;
+            }
+            displayBookings(allBookings, 1);
+        }
+
+        function filterChart() {
+            const year = document.getElementById('filter_year').value;
+            const startDate = new Date(year, 0, 1);
+            const endDate = new Date(year, 11, 31);
+
+            const filteredTotalUsedSeconds = {};
+            const filteredTotalAvailableSeconds = {};
+
+            const monthsRange = getMonthsRange(startDate, endDate);
+            monthsRange.forEach(month => {
+                const monthStr = month.toLocaleString('default', { month: 'long' }) + ' ' + month.getFullYear();
+                filteredTotalUsedSeconds[monthStr] = totalUsedSecondsPerMonth[monthStr] || 0;
+                filteredTotalAvailableSeconds[monthStr] = maxSecondsPerMonth - filteredTotalUsedSeconds[monthStr];
+            });
+
+            updateChart(Object.keys(filteredTotalUsedSeconds), filteredTotalUsedSeconds, filteredTotalAvailableSeconds);
+        }
+
+        function resetChartFilter() {
+            document.getElementById('filter_year').value = '2024';
+            updateChart();
+        }
+
+        function updateChart(months = null, filteredTotalUsedSeconds = null, filteredTotalAvailableSeconds = null) {
+            const year = document.getElementById('filter_year').value || new Date().getFullYear();
+            const startDate = new Date(year, 0, 1);
+            const endDate = new Date(year, 11, 31);
+            const monthsRange = getMonthsRange(startDate, endDate);
+            const defaultMonths = monthsRange.map(month => month.toLocaleString('default', { month: 'long' }) + ' ' + month.getFullYear());
+            
+            if (!months) {
+                months = defaultMonths;
+            }
+
+            if (!filteredTotalUsedSeconds) {
+                filteredTotalUsedSeconds = {};
+                monthsRange.forEach(month => {
+                    const monthStr = month.toLocaleString('default', { month: 'long' }) + ' ' + month.getFullYear();
+                    filteredTotalUsedSeconds[monthStr] = totalUsedSecondsPerMonth[monthStr] || 0;
+                });
+            }
+
+            if (!filteredTotalAvailableSeconds) {
+                filteredTotalAvailableSeconds = {};
+                monthsRange.forEach(month => {
+                    const monthStr = month.toLocaleString('default', { month: 'long' }) + ' ' + month.getFullYear();
+                    filteredTotalAvailableSeconds[monthStr] = maxSecondsPerMonth - (filteredTotalUsedSeconds[monthStr] || 0);
+                });
+            }
+
+            const ctx = document.getElementById('stackedBarChart').getContext('2d');
+            const chartData = {
+                labels: defaultMonths,
+                datasets: [{
+                    label: 'Verbrauchte Sekunden',
+                    data: defaultMonths.map(month => filteredTotalUsedSeconds[month] || 0),
+                    backgroundColor: '#ff6384',
+                },
+                {
+                    label: 'Verfügbare Sekunden',
+                    data: defaultMonths.map(month => filteredTotalAvailableSeconds[month] || 0),
+                    backgroundColor: '#36a2eb',
+                }]
+            };
+
+            if (window.myChart instanceof Chart) {
+                window.myChart.destroy();
+            }
+
+            window.myChart = new Chart(ctx, {
+                type: 'bar',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Verbrauchte vs. Verfügbare Einblendungssekunden pro Monat'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(tooltipItem) {
+                                    const month = tooltipItem.label;
+                                    const availableSeconds = filteredTotalAvailableSeconds[month] || 0;
+                                    const basisPackages = Math.floor(availableSeconds / slotPackages["Basis"].seconds_per_day / maxDaysPerMonth);
+                                    const standardPackages = Math.floor(availableSeconds / slotPackages["Standard"].seconds_per_day / maxDaysPerMonth);
+                                    const premiumPackages = Math.floor(availableSeconds / slotPackages["Premium"].seconds_per_day / maxDaysPerMonth);
+                                    return [
+                                        `Verfügbare Sekunden: ${availableSeconds}`,
+                                        `Basis Pakete: ${basisPackages}`,
+                                        `Standard Pakete: ${standardPackages}`,
+                                        `Premium Pakete: ${premiumPackages}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                        },
+                        y: {
+                            stacked: true,
+                        }
+                    }
+                }
+            });
+        }
+
+        function filterRevenue() {
+            const startDateValue = document.getElementById('revenue_filter_start_date').value;
+            const endDateValue = document.getElementById('revenue_filter_end_date').value;
+            const firmFilter = document.getElementById('filter_firm').value;
+            let filteredRevenue = {};
+
+            if (startDateValue && endDateValue) {
+                const startDate = new Date(startDateValue + '-01');
+                const endDate = new Date(endDateValue + '-01');
+                const monthsRange = getMonthsRange(startDate, endDate);
+
+                if (firmFilter === 'all') {
+                    monthsRange.forEach(month => {
+                        const monthStr = month.toLocaleString('default', { month: 'long' }) + ' ' + month.getFullYear();
+                        filteredRevenue[monthStr] = revenuePerMonth[monthStr] || 0;
+                    });
+                } else {
+                    monthsRange.forEach(month => {
+                        const monthStr = month.toLocaleString('default', { month: 'long' }) + ' ' + month.getFullYear();
+                        filteredRevenue[monthStr] = 0;
+                        allBookings.forEach(booking => {
+                            if (booking.firmName === firmFilter &&
+                                (new Date(booking.startDate + '-01') <= new Date(month) && new Date(booking.endDate + '-01') >= new Date(month))) {
+                                filteredRevenue[monthStr] += booking.pricePerMonth;
+                            }
+                        });
+                    });
+                }
+            } else {
+                filteredRevenue = revenuePerMonth;
+            }
+
+            updateRevenueTable(filteredRevenue);
+        }
+
+        function resetRevenueFilter() {
+            document.getElementById('revenue_filter_start_date').value = '';
+            document.getElementById('revenue_filter_end_date').value = '';
+            document.getElementById('filter_firm').value = 'all';
+            updateRevenueTable(originalRevenuePerMonth);
+        }
+
+        function updateRevenueTable(filteredRevenue = null) {
+            if (filteredRevenue === null) {
+                filteredRevenue = revenuePerMonth;
+            }
+
+            const revenueTableBody = document.querySelector('#revenue-table tbody');
+            revenueTableBody.innerHTML = '';
+
+            let totalRevenue = 0;
+            const months = Object.keys(filteredRevenue);
+
+            months.forEach(monthStr => {
+                const row = document.createElement('tr');
+                const revenue = (filteredRevenue[monthStr] || 0).toFixed(2);
+                totalRevenue += parseFloat(revenue);
+                row.innerHTML = `<td>${monthStr}</td><td>${revenue} €</td>`;
+                revenueTableBody.appendChild(row);
+            });
+
+            document.getElementById('total-revenue').textContent = totalRevenue.toFixed(2) + ' €';
+        }
+
+        function showPackageInfo(packageType) {
+            const packageInfo = slotPackages[packageType];
+            const popup = document.getElementById('popup');
+            const popupTitle = document.getElementById('popup-title');
+            const popupContent = document.getElementById('popup-content');
+
+            popupTitle.textContent = packageType + " Paket";
+            popupContent.innerHTML = `
+                <p>Preis pro Monat: ${packageInfo.price} €</p>
+                <p>Einblendungen pro Tag: ${packageInfo.insertions_per_day}</p>
+                <p>Einblendungsdauer: ${packageInfo.insertion_duration} Sekunden</p>
+                <p>Verbrauchte Sekunden pro Tag: ${packageInfo.seconds_per_day}</p>
+            `;
+
+            popup.classList.add('active');
+        }
+
+        function closePopup() {
+            const popup = document.getElementById('popup');
+            popup.classList.remove('active');
+        }
+
+        function showNotesPopup(button, target) {
+            currentNotesTarget = target;
+            const notesPopup = document.getElementById('notes-popup');
+            const notesTextarea = document.getElementById('notes-textarea');
+            notesTextarea.value = localStorage.getItem(target) || '';
+            notesPopup.classList.add('active');
+        }
+
+        function closeNotesPopup() {
+            const notesPopup = document.getElementById('notes-popup');
+            notesPopup.classList.remove('active');
+        }
+
+        function saveNotes() {
+            const notesTextarea = document.getElementById('notes-textarea');
+            localStorage.setItem(currentNotesTarget, notesTextarea.value);
+            closeNotesPopup();
+            const iconButton = document.querySelector(`button[onclick="showNotesPopup(this, '${currentNotesTarget}')"] i`);
+            if (iconButton) {
+                iconButton.style.color = 'orange';
+            }
+        }
+
+        function getNext12Months() {
+            const months = [];
+            let currentDate = new Date();
+            for (let i = 0; i < 12; i++) {
+                const monthStr = currentDate.toLocaleString('default', { month: 'long' }) + ' ' + currentDate.getFullYear();
+                months.push(monthStr);
+                currentDate.setMonth(currentDate.getMonth() + 1);
+            }
+            return months;
+        }
+
+        function getMonthsRange(startDate, endDate) {
+            const monthsRange = [];
+            let currentDate = new Date(startDate);
+            currentDate.setDate(1);  // Set to the first day of the month
+            const end = new Date(endDate);
+            end.setMonth(end.getMonth() + 1);  // Move to the start of the next month
+            end.setDate(0);  // Move to the last day of the end month
+
+            while (currentDate <= end) {
+                monthsRange.push(new Date(currentDate));
+                currentDate.setMonth(currentDate.getMonth() + 1);
+            }
+
+            return monthsRange;
+        }
+
+        function showTabContent(tabId) {
+            const tabs = document.querySelectorAll('.tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+
+            document.querySelector(`.tab[onclick="showTabContent('${tabId}')"]`).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        // Initiale Aufrufe
+        updateFirmFilter();
+        updateFirmNameSuggestions();
+        updateChart();
+        updateRevenueTable();
+        updateArchive();
     </script>
 </head>
 <body>
     <h1>Werbepakete Verwaltung</h1>
-    <form id="werbepakete-form" onsubmit="handleFormSubmit(event)">
-        <label for="paket_name">Paketname:</label>
-        <input type="text" id="paket_name" name="paket_name" required><br><br>
-        
-        <label for="beschreibung">Beschreibung:</label>
-        <textarea id="beschreibung" name="beschreibung" required></textarea><br><br>
-        
-        <label for="preis">Preis:</label>
-        <input type="number" id="preis" name="preis" required><br><br>
-        
-        <label for="dauer">Dauer (in Tagen):</label>
-        <input type="number" id="dauer" name="dauer" required><br><br>
-        
-        <label for="aktiv">Aktiv:</label>
-        <input type="checkbox" id="aktiv" name="aktiv"><br><br>
-        
-        <button type="submit">Werbepaket hinzufügen</button>
-    </form>
+    <div class="tabs">
+        <div class="tab active" onclick="showTabContent('tab-1')">Buchungen & Archive</div>
+        <div class="tab" onclick="showTabContent('tab-2')">Einblendungssekunden Diagramm</div>
+        <div class="tab" onclick="showTabContent('tab-3')">Einnahmen pro Monat</div>
+    </div>
+    <div id="tab-1" class="tab-content active">
+        <form id="werbepakete-form">
+            <label for="firm_name">Firmenname:</label>
+            <input type="text" id="firm_name" name="firm_name" required autocomplete="off">
+            <div id="firm-name-suggestions" class="suggestions"></div><br><br>
+            
+            <label for="start_date">Startmonat:</label>
+            <input type="month" id="start_date" name="start_date" required><br><br>
+            
+            <label for="end_date">Endmonat:</label>
+            <input type="month" id="end_date" name="end_date" required><br><br>
+            
+            <label for="package">Paket:</label>
+            <select id="package" name="package" required>
+                <option value="Basis">Basis</option>
+                <option value="Standard">Standard</option>
+                <option value="Premium">Premium</option>
+                <option value="Sonstiges">Sonstiges</option>
+            </select><br><br>
+            
+            <div id="custom-package">
+                <label for="custom_price">Preis pro Monat:</label>
+                <input type="number" id="custom_price" name="custom_price"><br><br>
+                
+                <label for="custom_seconds">Verbrauchte Sekunden pro Tag:</label>
+                <input type="number" id="custom_seconds" name="custom_seconds"><br><br>
+            </div>
 
-    <h2>Werbepakete Übersicht</h2>
-    <div id="werbepakete-uebersicht"></div>
+            <label for="discount">Rabatt (%):</label>
+            <input type="number" id="discount" name="discount" value="0" required><br><br>
+
+            <label for="payment_method">Zahlungsmethode:</label>
+            <select id="payment_method" name="payment_method" required>
+                <option value="Rechnung">Rechnung</option>
+                <option value="Gutschrift">Gutschrift</option>
+                <option value="Warenausgleich">Warenausgleich</option>
+                <option value="Sonstiges">Sonstiges</option>
+            </select><br><br>
+            
+            <button type="submit">Buchung hinzufügen</button>
+        </form>
+
+        <div id="popup" class="popup">
+            <h2 id="popup-title"></h2>
+            <p id="popup-content"></p>
+            <button onclick="closePopup()">Schließen</button>
+        </div>
+
+        <div id="confirm-popup" class="popup">
+            <h2>Bestätigung</h2>
+            <p id="confirm-message">Sind Sie sicher, dass Sie den Zahlungsstatus ändern möchten?</p>
+            <button type="button" onclick="confirmChangeStatus()">Ja</button>
+            <button type="button" onclick="closeConfirmPopup()">Nein</button>
+        </div>
+
+        <div id="edit-confirm-popup" class="popup">
+            <h2>Bestätigung</h2>
+            <p id="edit-confirm-message">Sind Sie sicher, dass Sie die Buchung bearbeiten möchten?</p>
+            <button type="button" onclick="confirmEditBooking()">Ja</button>
+            <button type="button" onclick="closeEditConfirmPopup()">Nein</button>
+        </div>
+
+        <div id="notes-popup" class="popup">
+            <h2>Notizen</h2>
+            <textarea id="notes-textarea" rows="10" cols="30"></textarea><br><br>
+            <button type="button" onclick="saveNotes()">Speichern</button>
+            <button type="button" onclick="closeNotesPopup()">Schließen</button>
+        </div>
+
+        <h2>Paketübersicht</h2>
+        <button onclick="showPackageInfo('Basis')">Basis</button>
+        <button onclick="showPackageInfo('Standard')">Standard</button>
+        <button onclick="showPackageInfo('Premium')">Premium</button>
+
+        <h2>Buchungen</h2>
+        <div class="filter-container">
+            <div>
+                <label for="booking_filter_start_date">Startmonat:</label>
+                <input type="month" id="booking_filter_start_date">
+                <label for="booking_filter_end_date">Endmonat:</label>
+                <input type="month" id="booking_filter_end_date">
+                <label for="booking_filter_firm">Firma:</label>
+                <select id="booking_filter_firm">
+                    <option value="all">Alle</option>
+                </select>
+                <label for="sort_entries">Sortieren nach:</label>
+                <select id="sort_entries" onchange="sortBookings()">
+                    <option value="date_desc">Zuletzt hinzugefügt oben</option>
+                    <option value="date_asc">Zuletzt hinzugefügt unten</option>
+                    <option value="manufacturer">Hersteller</option>
+                    <option value="paid">Bezahlt</option>
+                    <option value="unpaid">Nicht bezahlt</option>
+                </select>
+            </div>
+            <div>
+                <button type="button" onclick="filterBookings()">Filtern</button>
+                <button type="button" onclick="resetBookingFilter()">Filter löschen</button>
+            </div>
+        </div>
+        <table id="bookings-table">
+            <thead>
+                <tr>
+                    <th>Firmenname</th>
+                    <th>Startmonat</th>
+                    <th>Endmonat</th>
+                    <th>Paket</th>
+                    <th>Zahlungsmethode</th>
+                    <th>Rechnung bezahlt</th>
+                    <th>Gesamtkosten</th>
+                    <th>Aktionen</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Buchungen werden hier hinzugefügt -->
+            </tbody>
+        </table>
+        <div id="pagination"></div>
+        
+        <h2>Gelöschte Rechnungen</h2>
+        <div id="deleted-pagination"></div>
+        <div id="archive"></div>
+    </div>
+
+    <div id="tab-2" class="tab-content">
+        <h2>Einblendungssekunden Diagramm</h2>
+        <div class="filter-container">
+            <div>
+                <label for="filter_year">Jahr:</label>
+                <input type="number" id="filter_year" min="2000" max="2100" value="2024">
+            </div>
+            <div>
+                <button type="button" onclick="filterChart()">Filtern</button>
+                <button type="button" onclick="resetChartFilter()">Filter löschen</button>
+            </div>
+        </div>
+        <div id="chart-container">
+            <canvas id="stackedBarChart"></canvas>
+        </div>
+    </div>
+
+    <div id="tab-3" class="tab-content">
+        <h2>Einnahmen pro Monat</h2>
+        <div class="filter-container">
+            <div>
+                <label for="revenue_filter_start_date">Startmonat:</label>
+                <input type="month" id="revenue_filter_start_date">
+                <label for="revenue_filter_end_date">Endmonat:</label>
+                <input type="month" id="revenue_filter_end_date">
+                <label for="filter_firm">Firma:</label>
+                <select id="filter_firm">
+                    <option value="all">Alle</option>
+                </select>
+            </div>
+            <div>
+                <button type="button" onclick="filterRevenue()">Filtern</button>
+                <button type="button" onclick="resetRevenueFilter()">Filter löschen</button>
+            </div>
+        </div>
+        <table id="revenue-table">
+            <thead>
+                <tr>
+                    <th>Monat</th>
+                    <th>Einnahmen</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Einnahmen werden hier angezeigt -->
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th>Total</th>
+                    <th id="total-revenue">0 €</th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
 </body>
 </html>
+
