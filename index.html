@@ -125,120 +125,192 @@
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script type="module">
-        // Firebase SDK
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
-        import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+</head>
+<body>
+    <h1>Werbepakete Verwaltung</h1>
+    <div class="tabs">
+        <div class="tab active" onclick="showTabContent('tab-1')">Buchungen & Archive</div>
+        <div class="tab" onclick="showTabContent('tab-2')">Einblendungssekunden Diagramm</div>
+        <div class="tab" onclick="showTabContent('tab-3')">Einnahmen pro Monat</div>
+    </div>
+    <div id="tab-1" class="tab-content active">
+        <form id="werbepakete-form">
+            <label for="firm_name">Firmenname:</label>
+            <input type="text" id="firm_name" name="firm_name" required autocomplete="off">
+            <div id="firm-name-suggestions" class="suggestions"></div><br><br>
+            
+            <label for="start_date">Startmonat:</label>
+            <input type="month" id="start_date" name="start_date" required><br><br>
+            
+            <label for="end_date">Endmonat:</label>
+            <input type="month" id="end_date" name="end_date" required><br><br>
+            
+            <label for="package">Paket:</label>
+            <select id="package" name="package" required>
+                <option value="Basis">Basis</option>
+                <option value="Standard">Standard</option>
+                <option value="Premium">Premium</option>
+                <option value="Sonstiges">Sonstiges</option>
+            </select><br><br>
+            
+            <div id="custom-package">
+                <label for="custom_price">Preis pro Monat:</label>
+                <input type="number" id="custom_price" name="custom_price"><br><br>
+                
+                <label for="custom_seconds">Verbrauchte Sekunden pro Tag:</label>
+                <input type="number" id="custom_seconds" name="custom_seconds"><br><br>
+            </div>
 
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyDEBclnXkB0kenNN9pXnvitcR2pWbRPozU",
-            authDomain: "wkz-verwaltung.firebaseapp.com",
-            projectId: "wkz-verwaltung",
-            storageBucket: "wkz-verwaltung.appspot.com",
-            messagingSenderId: "401333744873",
-            appId: "1:401333744873:web:3f93295e18c15e99bb2c78",
-            measurementId: "G-BYQRY9S3M9"
-        };
+            <label for="discount">Rabatt (%):</label>
+            <input type="number" id="discount" name="discount" value="0" required><br><br>
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+            <label for="payment_method">Zahlungsmethode:</label>
+            <select id="payment_method" name="payment_method" required>
+                <option value="Rechnung">Rechnung</option>
+                <option value="Gutschrift">Gutschrift</option>
+                <option value="Warenausgleich">Warenausgleich</option>
+                <option value="Sonstiges">Sonstiges</option>
+            </select><br><br>
+            
+            <button type="submit">Buchung hinzufügen</button>
+        </form>
 
-        // Firebase functions for Werbepakete
-        async function addWerbepaket(data) {
-            try {
-                const docRef = await addDoc(collection(db, "werbepakete"), data);
-                console.log("Document written with ID: ", docRef.id);
-                alert('Werbepaket erfolgreich hinzugefügt!');
-                fetchWerbepakete();
-            } catch (e) {
-                console.error("Error adding document: ", e);
-            }
-        }
+        <div id="popup" class="popup">
+            <h2 id="popup-title"></h2>
+            <p id="popup-content"></p>
+            <button onclick="closePopup()">Schließen</button>
+        </div>
 
-        async function fetchWerbepakete() {
-            const querySnapshot = await getDocs(collection(db, "werbepakete"));
-            const werbepaketeDiv = document.getElementById('werbepakete-uebersicht');
-            werbepaketeDiv.innerHTML = '';
-            querySnapshot.forEach((doc) => {
-                const data = doc.data();
-                const div = document.createElement('div');
-                div.innerHTML = `
-                    <h3>${data.paketName}</h3>
-                    <p>${data.beschreibung}</p>
-                    <p>Preis: ${data.preis} €</p>
-                    <p>Dauer: ${data.dauer} Tage</p>
-                    <p>Aktiv: ${data.aktiv ? 'Ja' : 'Nein'}</p>
-                    <button onclick="editWerbepaket('${doc.id}', '${data.paketName}', '${data.beschreibung}', ${data.preis}, ${data.dauer}, ${data.aktiv})">Bearbeiten</button>
-                    <button onclick="deleteWerbepaket('${doc.id}')">Löschen</button>
-                `;
-                werbepaketeDiv.appendChild(div);
-            });
-        }
+        <div id="confirm-popup" class="popup">
+            <h2>Bestätigung</h2>
+            <p id="confirm-message">Sind Sie sicher, dass Sie den Zahlungsstatus ändern möchten?</p>
+            <button type="button" onclick="confirmChangeStatus()">Ja</button>
+            <button type="button" onclick="closeConfirmPopup()">Nein</button>
+        </div>
 
-        async function updateWerbepaket(docId, data) {
-            try {
-                const docRef = doc(db, "werbepakete", docId);
-                await updateDoc(docRef, data);
-                alert('Werbepaket erfolgreich aktualisiert!');
-                fetchWerbepakete();
-            } catch (e) {
-                console.error("Error updating document: ", e);
-            }
-        }
+        <div id="edit-confirm-popup" class="popup">
+            <h2>Bestätigung</h2>
+            <p id="edit-confirm-message">Sind Sie sicher, dass Sie die Buchung bearbeiten möchten?</p>
+            <button type="button" onclick="confirmEditBooking()">Ja</button>
+            <button type="button" onclick="closeEditConfirmPopup()">Nein</button>
+        </div>
 
-        async function deleteWerbepaket(docId) {
-            try {
-                await deleteDoc(doc(db, "werbepakete", docId));
-                alert('Werbepaket erfolgreich gelöscht!');
-                fetchWerbepakete();
-            } catch (e) {
-                console.error("Error deleting document: ", e);
-            }
-        }
+        <div id="notes-popup" class="popup">
+            <h2>Notizen</h2>
+            <textarea id="notes-textarea" rows="10" cols="30"></textarea><br><br>
+            <button type="button" onclick="saveNotes()">Speichern</button>
+            <button type="button" onclick="closeNotesPopup()">Schließen</button>
+        </div>
 
-        // Load Werbepakete on page load
-        document.addEventListener('DOMContentLoaded', (event) => {
-            fetchWerbepakete();
-        });
+        <h2>Paketübersicht</h2>
+        <button onclick="showPackageInfo('Basis')">Basis</button>
+        <button onclick="showPackageInfo('Standard')">Standard</button>
+        <button onclick="showPackageInfo('Premium')">Premium</button>
 
-        // Helper functions for handling form submission and UI updates
-        function handleFormSubmit(event) {
-            event.preventDefault();
-            const paketName = document.getElementById('paket_name').value;
-            const beschreibung = document.getElementById('beschreibung').value;
-            const preis = parseFloat(document.getElementById('preis').value);
-            const dauer = parseInt(document.getElementById('dauer').value);
-            const aktiv = document.getElementById('aktiv').checked;
+        <h2>Buchungen</h2>
+        <div class="filter-container">
+            <div>
+                <label for="booking_filter_start_date">Startmonat:</label>
+                <input type="month" id="booking_filter_start_date">
+                <label for="booking_filter_end_date">Endmonat:</label>
+                <input type="month" id="booking_filter_end_date">
+                <label for="booking_filter_firm">Firma:</label>
+                <select id="booking_filter_firm">
+                    <option value="all">Alle</option>
+                </select>
+                <label for="sort_entries">Sortieren nach:</label>
+                <select id="sort_entries" onchange="sortBookings()">
+                    <option value="date_desc">Zuletzt hinzugefügt oben</option>
+                    <option value="date_asc">Zuletzt hinzugefügt unten</option>
+                    <option value="manufacturer">Hersteller</option>
+                    <option value="paid">Bezahlt</option>
+                    <option value="unpaid">Nicht bezahlt</option>
+                </select>
+            </div>
+            <div>
+                <button type="button" onclick="filterBookings()">Filtern</button>
+                <button type="button" onclick="resetBookingFilter()">Filter löschen</button>
+            </div>
+        </div>
+        <table id="bookings-table">
+            <thead>
+                <tr>
+                    <th>Firmenname</th>
+                    <th>Startmonat</th>
+                    <th>Endmonat</th>
+                    <th>Paket</th>
+                    <th>Zahlungsmethode</th>
+                    <th>Rechnung bezahlt</th>
+                    <th>Gesamtkosten</th>
+                    <th>Aktionen</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Buchungen werden hier hinzugefügt -->
+            </tbody>
+        </table>
+        <div id="pagination"></div>
+        
+        <h2>Gelöschte Rechnungen</h2>
+        <div id="deleted-pagination"></div>
+        <div id="archive"></div>
+    </div>
 
-            const data = { paketName, beschreibung, preis, dauer, aktiv };
-            addWerbepaket(data);
-        }
+    <div id="tab-2" class="tab-content">
+        <h2>Einblendungssekunden Diagramm</h2>
+        <div class="filter-container">
+            <div>
+                <label for="filter_year">Jahr:</label>
+                <input type="number" id="filter_year" min="2000" max="2100" value="2024">
+            </div>
+            <div>
+                <button type="button" onclick="filterChart()">Filtern</button>
+                <button type="button" onclick="resetChartFilter()">Filter löschen</button>
+            </div>
+        </div>
+        <div id="chart-container">
+            <canvas id="stackedBarChart"></canvas>
+        </div>
+    </div>
 
-        function editWerbepaket(docId, paketName, beschreibung, preis, dauer, aktiv) {
-            document.getElementById('paket_name').value = paketName;
-            document.getElementById('beschreibung').value = beschreibung;
-            document.getElementById('preis').value = preis;
-            document.getElementById('dauer').value = dauer;
-            document.getElementById('aktiv').checked = aktiv;
+    <div id="tab-3" class="tab-content">
+        <h2>Einnahmen pro Monat</h2>
+        <div class="filter-container">
+            <div>
+                <label for="revenue_filter_start_date">Startmonat:</label>
+                <input type="month" id="revenue_filter_start_date">
+                <label for="revenue_filter_end_date">Endmonat:</label>
+                <input type="month" id="revenue_filter_end_date">
+                <label for="filter_firm">Firma:</label>
+                <select id="filter_firm">
+                    <option value="all">Alle</option>
+                </select>
+            </div>
+            <div>
+                <button type="button" onclick="filterRevenue()">Filtern</button>
+                <button type="button" onclick="resetRevenueFilter()">Filter löschen</button>
+            </div>
+        </div>
+        <table id="revenue-table">
+            <thead>
+                <tr>
+                    <th>Monat</th>
+                    <th>Einnahmen</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Einnahmen werden hier angezeigt -->
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th>Total</th>
+                    <th id="total-revenue">0 €</th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
 
-            document.getElementById('werbepakete-form').onsubmit = (e) => {
-                e.preventDefault();
-                const updatedData = {
-                    paketName: document.getElementById('paket_name').value,
-                    beschreibung: document.getElementById('beschreibung').value,
-                    preis: parseFloat(document.getElementById('preis').value),
-                    dauer: parseInt(document.getElementById('dauer').value),
-                    aktiv: document.getElementById('aktiv').checked
-                };
-                updateWerbepaket(docId, updatedData);
-                document.getElementById('werbepakete-form').reset();
-                document.getElementById('werbepakete-form').onsubmit = handleFormSubmit;
-            };
-        }
-
-        // Existing functions and code for handling other parts of the application
+    <script>
         const slotPackages = {
             "Basis": {"price": 250, "seconds_per_day": 600, "insertions_per_day": 60, "insertion_duration": 10},
             "Standard": {"price": 450, "seconds_per_day": 1200, "insertions_per_day": 120, "insertion_duration": 10},
@@ -323,7 +395,7 @@
             const totalCost = discountedPricePerMonth * monthsRange.length;
             
             const bookingRow = document.createElement('tr');
-            bookingRow.innerHTML = `
+            bookingRow.innerHTML = 
                 <td>${firmName}</td>
                 <td>${startDate}</td>
                 <td>${endDate}</td>
@@ -337,7 +409,7 @@
                     <button class="icon-button" onclick="showEditConfirmPopup(this)"><i class="fas fa-edit"></i></button>
                     <button class="icon-button" onclick="showNotesPopup(this, '${firmName}-${startDate}')"><i class="fas fa-info"></i></button>
                 </td>
-            `;
+            ;
             document.querySelector('#bookings-table tbody').prepend(bookingRow);
 
             monthsRange.forEach(month => {
@@ -624,10 +696,10 @@
 
                 paginatedBookings.forEach((booking, index) => {
                     const archiveRow = document.createElement('div');
-                    archiveRow.innerHTML = `
+                    archiveRow.innerHTML = 
                         ${booking.firmName} (${booking.startDate} - ${booking.endDate}) - ${booking.packageType} 
                         <span class="archive-link" onclick="restoreBooking(${index + startIndex})">Wiederherstellen</span>
-                    `;
+                    ;
                     archive.appendChild(archiveRow);
                 });
             }
@@ -716,7 +788,7 @@
 
             paginatedBookings.forEach(booking => {
                 const bookingRow = document.createElement('tr');
-                bookingRow.innerHTML = `
+                bookingRow.innerHTML = 
                     <td>${booking.firmName}</td>
                     <td>${booking.startDate}</td>
                     <td>${booking.endDate}</td>
@@ -730,7 +802,7 @@
                         <button class="icon-button" onclick="showEditConfirmPopup(this)"><i class="fas fa-edit"></i></button>
                         <button class="icon-button" onclick="showNotesPopup(this, '${booking.firmName}-${booking.startDate}')"><i class="fas fa-info"></i></button>
                     </td>
-                `;
+                ;
                 bookingsTableBody.appendChild(bookingRow);
             });
 
@@ -876,10 +948,10 @@
                                     const standardPackages = Math.floor(availableSeconds / slotPackages["Standard"].seconds_per_day / maxDaysPerMonth);
                                     const premiumPackages = Math.floor(availableSeconds / slotPackages["Premium"].seconds_per_day / maxDaysPerMonth);
                                     return [
-                                        `Verfügbare Sekunden: ${availableSeconds}`,
-                                        `Basis Pakete: ${basisPackages}`,
-                                        `Standard Pakete: ${standardPackages}`,
-                                        `Premium Pakete: ${premiumPackages}`
+                                        Verfügbare Sekunden: ${availableSeconds},
+                                        Basis Pakete: ${basisPackages},
+                                        Standard Pakete: ${standardPackages},
+                                        Premium Pakete: ${premiumPackages}
                                     ];
                                 }
                             }
@@ -954,7 +1026,7 @@
                 const row = document.createElement('tr');
                 const revenue = (filteredRevenue[monthStr] || 0).toFixed(2);
                 totalRevenue += parseFloat(revenue);
-                row.innerHTML = `<td>${monthStr}</td><td>${revenue} €</td>`;
+                row.innerHTML = <td>${monthStr}</td><td>${revenue} €</td>;
                 revenueTableBody.appendChild(row);
             });
 
@@ -968,12 +1040,12 @@
             const popupContent = document.getElementById('popup-content');
 
             popupTitle.textContent = packageType + " Paket";
-            popupContent.innerHTML = `
+            popupContent.innerHTML = 
                 <p>Preis pro Monat: ${packageInfo.price} €</p>
                 <p>Einblendungen pro Tag: ${packageInfo.insertions_per_day}</p>
                 <p>Einblendungsdauer: ${packageInfo.insertion_duration} Sekunden</p>
                 <p>Verbrauchte Sekunden pro Tag: ${packageInfo.seconds_per_day}</p>
-            `;
+            ;
 
             popup.classList.add('active');
         }
@@ -1000,7 +1072,7 @@
             const notesTextarea = document.getElementById('notes-textarea');
             localStorage.setItem(currentNotesTarget, notesTextarea.value);
             closeNotesPopup();
-            const iconButton = document.querySelector(`button[onclick="showNotesPopup(this, '${currentNotesTarget}')"] i`);
+            const iconButton = document.querySelector(button[onclick="showNotesPopup(this, '${currentNotesTarget}')"] i);
             if (iconButton) {
                 iconButton.style.color = 'orange';
             }
@@ -1045,7 +1117,7 @@
                 content.classList.remove('active');
             });
 
-            document.querySelector(`.tab[onclick="showTabContent('${tabId}')"]`).classList.add('active');
+            document.querySelector(.tab[onclick="showTabContent('${tabId}')"]).classList.add('active');
             document.getElementById(tabId).classList.add('active');
         }
 
@@ -1056,190 +1128,5 @@
         updateRevenueTable();
         updateArchive();
     </script>
-</head>
-<body>
-    <h1>Werbepakete Verwaltung</h1>
-    <div class="tabs">
-        <div class="tab active" onclick="showTabContent('tab-1')">Buchungen & Archive</div>
-        <div class="tab" onclick="showTabContent('tab-2')">Einblendungssekunden Diagramm</div>
-        <div class="tab" onclick="showTabContent('tab-3')">Einnahmen pro Monat</div>
-    </div>
-    <div id="tab-1" class="tab-content active">
-        <form id="werbepakete-form">
-            <label for="firm_name">Firmenname:</label>
-            <input type="text" id="firm_name" name="firm_name" required autocomplete="off">
-            <div id="firm-name-suggestions" class="suggestions"></div><br><br>
-            
-            <label for="start_date">Startmonat:</label>
-            <input type="month" id="start_date" name="start_date" required><br><br>
-            
-            <label for="end_date">Endmonat:</label>
-            <input type="month" id="end_date" name="end_date" required><br><br>
-            
-            <label for="package">Paket:</label>
-            <select id="package" name="package" required>
-                <option value="Basis">Basis</option>
-                <option value="Standard">Standard</option>
-                <option value="Premium">Premium</option>
-                <option value="Sonstiges">Sonstiges</option>
-            </select><br><br>
-            
-            <div id="custom-package">
-                <label for="custom_price">Preis pro Monat:</label>
-                <input type="number" id="custom_price" name="custom_price"><br><br>
-                
-                <label for="custom_seconds">Verbrauchte Sekunden pro Tag:</label>
-                <input type="number" id="custom_seconds" name="custom_seconds"><br><br>
-            </div>
-
-            <label for="discount">Rabatt (%):</label>
-            <input type="number" id="discount" name="discount" value="0" required><br><br>
-
-            <label for="payment_method">Zahlungsmethode:</label>
-            <select id="payment_method" name="payment_method" required>
-                <option value="Rechnung">Rechnung</option>
-                <option value="Gutschrift">Gutschrift</option>
-                <option value="Warenausgleich">Warenausgleich</option>
-                <option value="Sonstiges">Sonstiges</option>
-            </select><br><br>
-            
-            <button type="submit">Buchung hinzufügen</button>
-        </form>
-
-        <div id="popup" class="popup">
-            <h2 id="popup-title"></h2>
-            <p id="popup-content"></p>
-            <button onclick="closePopup()">Schließen</button>
-        </div>
-
-        <div id="confirm-popup" class="popup">
-            <h2>Bestätigung</h2>
-            <p id="confirm-message">Sind Sie sicher, dass Sie den Zahlungsstatus ändern möchten?</p>
-            <button type="button" onclick="confirmChangeStatus()">Ja</button>
-            <button type="button" onclick="closeConfirmPopup()">Nein</button>
-        </div>
-
-        <div id="edit-confirm-popup" class="popup">
-            <h2>Bestätigung</h2>
-            <p id="edit-confirm-message">Sind Sie sicher, dass Sie die Buchung bearbeiten möchten?</p>
-            <button type="button" onclick="confirmEditBooking()">Ja</button>
-            <button type="button" onclick="closeEditConfirmPopup()">Nein</button>
-        </div>
-
-        <div id="notes-popup" class="popup">
-            <h2>Notizen</h2>
-            <textarea id="notes-textarea" rows="10" cols="30"></textarea><br><br>
-            <button type="button" onclick="saveNotes()">Speichern</button>
-            <button type="button" onclick="closeNotesPopup()">Schließen</button>
-        </div>
-
-        <h2>Paketübersicht</h2>
-        <button onclick="showPackageInfo('Basis')">Basis</button>
-        <button onclick="showPackageInfo('Standard')">Standard</button>
-        <button onclick="showPackageInfo('Premium')">Premium</button>
-
-        <h2>Buchungen</h2>
-        <div class="filter-container">
-            <div>
-                <label for="booking_filter_start_date">Startmonat:</label>
-                <input type="month" id="booking_filter_start_date">
-                <label for="booking_filter_end_date">Endmonat:</label>
-                <input type="month" id="booking_filter_end_date">
-                <label for="booking_filter_firm">Firma:</label>
-                <select id="booking_filter_firm">
-                    <option value="all">Alle</option>
-                </select>
-                <label for="sort_entries">Sortieren nach:</label>
-                <select id="sort_entries" onchange="sortBookings()">
-                    <option value="date_desc">Zuletzt hinzugefügt oben</option>
-                    <option value="date_asc">Zuletzt hinzugefügt unten</option>
-                    <option value="manufacturer">Hersteller</option>
-                    <option value="paid">Bezahlt</option>
-                    <option value="unpaid">Nicht bezahlt</option>
-                </select>
-            </div>
-            <div>
-                <button type="button" onclick="filterBookings()">Filtern</button>
-                <button type="button" onclick="resetBookingFilter()">Filter löschen</button>
-            </div>
-        </div>
-        <table id="bookings-table">
-            <thead>
-                <tr>
-                    <th>Firmenname</th>
-                    <th>Startmonat</th>
-                    <th>Endmonat</th>
-                    <th>Paket</th>
-                    <th>Zahlungsmethode</th>
-                    <th>Rechnung bezahlt</th>
-                    <th>Gesamtkosten</th>
-                    <th>Aktionen</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Buchungen werden hier hinzugefügt -->
-            </tbody>
-        </table>
-        <div id="pagination"></div>
-        
-        <h2>Gelöschte Rechnungen</h2>
-        <div id="deleted-pagination"></div>
-        <div id="archive"></div>
-    </div>
-
-    <div id="tab-2" class="tab-content">
-        <h2>Einblendungssekunden Diagramm</h2>
-        <div class="filter-container">
-            <div>
-                <label for="filter_year">Jahr:</label>
-                <input type="number" id="filter_year" min="2000" max="2100" value="2024">
-            </div>
-            <div>
-                <button type="button" onclick="filterChart()">Filtern</button>
-                <button type="button" onclick="resetChartFilter()">Filter löschen</button>
-            </div>
-        </div>
-        <div id="chart-container">
-            <canvas id="stackedBarChart"></canvas>
-        </div>
-    </div>
-
-    <div id="tab-3" class="tab-content">
-        <h2>Einnahmen pro Monat</h2>
-        <div class="filter-container">
-            <div>
-                <label for="revenue_filter_start_date">Startmonat:</label>
-                <input type="month" id="revenue_filter_start_date">
-                <label for="revenue_filter_end_date">Endmonat:</label>
-                <input type="month" id="revenue_filter_end_date">
-                <label for="filter_firm">Firma:</label>
-                <select id="filter_firm">
-                    <option value="all">Alle</option>
-                </select>
-            </div>
-            <div>
-                <button type="button" onclick="filterRevenue()">Filtern</button>
-                <button type="button" onclick="resetRevenueFilter()">Filter löschen</button>
-            </div>
-        </div>
-        <table id="revenue-table">
-            <thead>
-                <tr>
-                    <th>Monat</th>
-                    <th>Einnahmen</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Einnahmen werden hier angezeigt -->
-            </tbody>
-            <tfoot>
-                <tr>
-                    <th>Total</th>
-                    <th id="total-revenue">0 €</th>
-                </tr>
-            </tfoot>
-        </table>
-    </div>
 </body>
 </html>
-
