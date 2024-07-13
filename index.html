@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Werbepakete Verwaltung</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .tabs {
+            display: flex;
+            cursor: pointer;
+        }
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            background-color: #f1f1f1;
+            border: 1px solid #ccc;
+        }
+        .tab.active {
+            background-color: #ccc;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border-top: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+        .unpaid {
+            background-color: red;
+        }
+        .paid {
+            background-color: green;
+        }
+        .icon-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            margin: 0 5px;
+            color: blue;
+            display: inline-flex;
+            align-items: center;
+            font-size: 1.2em;
+        }
+        .icon-button:hover {
+            color: lightblue;
+        }
+        .icon-button:focus {
+            outline: none;
+        }
+        .popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 1px solid black;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        .popup.active {
+            display: block;
+        }
+        .filter-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 20px 0;
+        }
+        .filter-container label {
+            margin-right: 10px;
+        }
+        .filter-container button {
+            margin-left: 10px;
+        }
+        #custom-package {
+            display: none;
+        }
+        .highlight {
+            border: 2px solid red;
+        }
+        .info-button {
+            background-color: orange;
+            border: none;
+            border-radius: 21px;
+            color: white;
+            font-size: 1em;
+            padding: 0.2em 0.5em;
+            cursor: pointer;
+        }
+        #chart-container {
+            width: 80%;
+            margin: auto;
+        }
+        .suggestions {
+            border: 1px solid #ccc;
+            max-height: 150px;
+            overflow-y: auto;
+            background-color: white;
+            position: absolute;
+        }
+        .suggestion {
+            padding: 5px;
+            cursor: pointer;
+        }
+        .suggestion:hover {
+            background-color: #eee;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script type="module">
+        // Firebase SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDEBclnXkB0kenNN9pXnvitcR2pWbRPozU",
+            authDomain: "wkz-verwaltung.firebaseapp.com",
+            projectId: "wkz-verwaltung",
+            storageBucket: "wkz-verwaltung.appspot.com",
+            messagingSenderId: "401333744873",
+            appId: "1:401333744873:web:3f93295e18c15e99bb2c78",
+            measurementId: "G-BYQRY9S3M9"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Firebase functions for Werbepakete
+        async function addWerbepaket(data) {
+            try {
+                const docRef = await addDoc(collection(db, "werbepakete"), data);
+                console.log("Document written with ID: ", docRef.id);
+                alert('Werbepaket erfolgreich hinzugefügt!');
+                fetchWerbepakete();
+            } catch (e) {
+                console.error("Error adding document: ", e);
+            }
+        }
+
+        async function fetchWerbepakete() {
+            const querySnapshot = await getDocs(collection(db, "werbepakete"));
+            const werbepaketeDiv = document.getElementById('werbepakete-uebersicht');
+            werbepaketeDiv.innerHTML = '';
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <h3>${data.paketName}</h3>
+                    <p>${data.beschreibung}</p>
+                    <p>Preis: ${data.preis} €</p>
+                    <p>Dauer: ${data.dauer} Tage</p>
+                    <p>Aktiv: ${data.aktiv ? 'Ja' : 'Nein'}</p>
+                    <button onclick="editWerbepaket('${doc.id}', '${data.paketName}', '${data.beschreibung}', ${data.preis}, ${data.dauer}, ${data.aktiv})">Bearbeiten</button>
+                    <button onclick="deleteWerbepaket('${doc.id}')">Löschen</button>
+                `;
+                werbepaketeDiv.appendChild(div);
+            });
+        }
+
+        async function updateWerbepaket(docId, data) {
+            try {
+                const docRef = doc(db, "werbepakete", docId);
+                await updateDoc(docRef, data);
+                alert('Werbepaket erfolgreich aktualisiert!');
+                fetchWerbepakete();
+            } catch (e) {
+                console.error("Error updating document: ", e);
+            }
+        }
+
+        async function deleteWerbepaket(docId) {
+            try {
+                await deleteDoc(doc(db, "werbepakete", docId));
+                alert('Werbepaket erfolgreich gelöscht!');
+                fetchWerbepakete();
+            } catch (e) {
+                console.error("Error deleting document: ", e);
+            }
+        }
+
+        // Load Werbepakete on page load
+        document.addEventListener('DOMContentLoaded', (event) => {
+            fetchWerbepakete();
+        });
+
+        // Helper functions for handling form submission and UI updates
+        function handleFormSubmit(event) {
+            event.preventDefault();
+            const paketName = document.getElementById('paket_name').value;
+            const beschreibung = document.getElementById('beschreibung').value;
+            const preis = parseFloat(document.getElementById('preis').value);
+            const dauer = parseInt(document.getElementById('dauer').value);
+            const aktiv = document.getElementById('aktiv').checked;
+
+            const data = { paketName, beschreibung, preis, dauer, aktiv };
+            addWerbepaket(data);
+        }
+
+        function editWerbepaket(docId, paketName, beschreibung, preis, dauer, aktiv) {
+            document.getElementById('paket_name').value = paketName;
+            document.getElementById('beschreibung').value = beschreibung;
+            document.getElementById('preis').value = preis;
+            document.getElementById('dauer').value = dauer;
+            document.getElementById('aktiv').checked = aktiv;
+
+            document.getElementById('werbepakete-form').onsubmit = (e) => {
+                e.preventDefault();
+                const updatedData = {
+                    paketName: document.getElementById('paket_name').value,
+                    beschreibung: document.getElementById('beschreibung').value,
+                    preis: parseFloat(document.getElementById('preis').value),
+                    dauer: parseInt(document.getElementById('dauer').value),
+                    aktiv: document.getElementById('aktiv').checked
+                };
+                updateWerbepaket(docId, updatedData);
+                document.getElementById('werbepakete-form').reset();
+                document.getElementById('werbepakete-form').onsubmit = handleFormSubmit;
+            };
+        }
+    </script>
+</head>
+<body>
+    <h1>Werbepakete Verwaltung</h1>
+    <form id="werbepakete-form" onsubmit="handleFormSubmit(event)">
+        <label for="paket_name">Paketname:</label>
+        <input type="text" id="paket_name" name="paket_name" required><br><br>
+        
+        <label for="beschreibung">Beschreibung:</label>
+        <textarea id="beschreibung" name="beschreibung" required></textarea><br><br>
+        
+        <label for="preis">Preis:</label>
+        <input type="number" id="preis" name="preis" required><br><br>
+        
+        <label for="dauer">Dauer (in Tagen):</label>
+        <input type="number" id="dauer" name="dauer" required><br><br>
+        
+        <label for="aktiv">Aktiv:</label>
+        <input type="checkbox" id="aktiv" name="aktiv"><br><br>
+        
+        <button type="submit">Werbepaket hinzufügen</button>
+    </form>
+
+    <h2>Werbepakete Übersicht</h2>
+    <div id="werbepakete-uebersicht"></div>
+</body>
+</html>
