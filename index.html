@@ -440,7 +440,7 @@
             addBookingToFirestore(booking);
 
             const bookingRow = document.createElement('tr');
-            bookingRow.innerHTML = `
+            bookingRow.innerHTML = 
                 <td>${firmName}</td>
                 <td>${startDate}</td>
                 <td>${endDate}</td>
@@ -452,9 +452,9 @@
                     <button class="icon-button" onclick="showConfirmPopup(this)"><i class="fas fa-euro-sign"></i></button>
                     <button class="icon-button" onclick="confirmDeleteBooking(this)"><i class="fas fa-trash"></i></button>
                     <button class="icon-button" onclick="showEditConfirmPopup(this)"><i class="fas fa-edit"></i></button>
-                    <button class="icon-button" onclick="showNotesPopup(this, '${firmName}-${startDate}')"><i class="fas fa-info-circle"></i></button>
+                    <button class="icon-button" onclick="showNotesPopup(this, '${firmName}-${startDate}')"><i class="fas fa-info"></i></button>
                 </td>
-            `;
+            ;
             document.querySelector('#bookings-table tbody').prepend(bookingRow);
 
             monthsRange.forEach(month => {
@@ -730,10 +730,10 @@
 
                 paginatedBookings.forEach((booking, index) => {
                     const archiveRow = document.createElement('div');
-                    archiveRow.innerHTML = `
+                    archiveRow.innerHTML = 
                         ${booking.firmName} (${booking.startDate} - ${booking.endDate}) - ${booking.packageType} 
                         <span class="archive-link" onclick="restoreBooking(${index + startIndex})">Wiederherstellen</span>
-                    `;
+                    ;
                     archive.appendChild(archiveRow);
                 });
             }
@@ -822,7 +822,7 @@
 
             paginatedBookings.forEach(booking => {
                 const bookingRow = document.createElement('tr');
-                bookingRow.innerHTML = `
+                bookingRow.innerHTML = 
                     <td>${booking.firmName}</td>
                     <td>${booking.startDate}</td>
                     <td>${booking.endDate}</td>
@@ -834,9 +834,9 @@
                         <button class="icon-button" onclick="showConfirmPopup(this)"><i class="fas fa-euro-sign"></i></button>
                         <button class="icon-button" onclick="confirmDeleteBooking(this)"><i class="fas fa-trash"></i></button>
                         <button class="icon-button" onclick="showEditConfirmPopup(this)"><i class="fas fa-edit"></i></button>
-                        <button class="icon-button" onclick="showNotesPopup(this, '${booking.firmName}-${booking.startDate}')"><i class="fas fa-info-circle"></i></button>
+                        <button class="icon-button" onclick="showNotesPopup(this, '${booking.firmName}-${booking.startDate}')"><i class="fas fa-info"></i></button>
                     </td>
-                `;
+                ;
                 bookingsTableBody.appendChild(bookingRow);
             });
 
@@ -982,10 +982,10 @@
                                     const standardPackages = Math.floor(availableSeconds / slotPackages["Standard"].seconds_per_day / maxDaysPerMonth);
                                     const premiumPackages = Math.floor(availableSeconds / slotPackages["Premium"].seconds_per_day / maxDaysPerMonth);
                                     return [
-                                        `Verfügbare Sekunden: ${availableSeconds}`,
-                                        `Basis Pakete: ${basisPackages}`,
-                                        `Standard Pakete: ${standardPackages}`,
-                                        `Premium Pakete: ${premiumPackages}`
+                                        Verfügbare Sekunden: ${availableSeconds},
+                                        Basis Pakete: ${basisPackages},
+                                        Standard Pakete: ${standardPackages},
+                                        Premium Pakete: ${premiumPackages}
                                     ];
                                 }
                             }
@@ -1060,7 +1060,7 @@
                 const row = document.createElement('tr');
                 const revenue = (filteredRevenue[monthStr] || 0).toFixed(2);
                 totalRevenue += parseFloat(revenue);
-                row.innerHTML = `<td>${monthStr}</td><td>${revenue} €</td>`;
+                row.innerHTML = <td>${monthStr}</td><td>${revenue} €</td>;
                 revenueTableBody.appendChild(row);
             });
 
@@ -1074,12 +1074,12 @@
             const popupContent = document.getElementById('popup-content');
 
             popupTitle.textContent = packageType + " Paket";
-            popupContent.innerHTML = `
+            popupContent.innerHTML = 
                 <p>Preis pro Monat: ${packageInfo.price} €</p>
                 <p>Einblendungen pro Tag: ${packageInfo.insertions_per_day}</p>
                 <p>Einblendungsdauer: ${packageInfo.insertion_duration} Sekunden</p>
                 <p>Verbrauchte Sekunden pro Tag: ${packageInfo.seconds_per_day}</p>
-            `;
+            ;
 
             popup.classList.add('active');
         }
@@ -1106,7 +1106,7 @@
             const notesTextarea = document.getElementById('notes-textarea');
             localStorage.setItem(currentNotesTarget, notesTextarea.value);
             closeNotesPopup();
-            const iconButton = document.querySelector(`button[onclick="showNotesPopup(this, '${currentNotesTarget}')"] i`);
+            const iconButton = document.querySelector(button[onclick="showNotesPopup(this, '${currentNotesTarget}')"] i);
             if (iconButton) {
                 iconButton.style.color = 'orange';
             }
@@ -1151,7 +1151,7 @@
                 content.classList.remove('active');
             });
 
-            document.querySelector(`.tab[onclick="showTabContent('${tabId}')"]`).classList.add('active');
+            document.querySelector(.tab[onclick="showTabContent('${tabId}')"]).classList.add('active');
             document.getElementById(tabId).classList.add('active');
         }
 
@@ -1164,6 +1164,5 @@
     </script>
 </body>
 </html>
-
 
 
