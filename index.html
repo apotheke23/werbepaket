@@ -452,7 +452,7 @@
                     <button class="icon-button" onclick="showConfirmPopup(this)"><i class="fas fa-euro-sign"></i></button>
                     <button class="icon-button" onclick="confirmDeleteBooking(this)"><i class="fas fa-trash"></i></button>
                     <button class="icon-button" onclick="showEditConfirmPopup(this)"><i class="fas fa-edit"></i></button>
-                    <button class="icon-button" onclick="showNotesPopup(this, '${firmName}-${startDate}')"><i class="fas fa-info"></i></button>
+                    <button class="icon-button" onclick="showNotesPopup(this, '${firmName}-${startDate}')"><i class="fas fa-info-circle"></i></button>
                 </td>
             `;
             document.querySelector('#bookings-table tbody').prepend(bookingRow);
@@ -834,7 +834,7 @@
                         <button class="icon-button" onclick="showConfirmPopup(this)"><i class="fas fa-euro-sign"></i></button>
                         <button class="icon-button" onclick="confirmDeleteBooking(this)"><i class="fas fa-trash"></i></button>
                         <button class="icon-button" onclick="showEditConfirmPopup(this)"><i class="fas fa-edit"></i></button>
-                        <button class="icon-button" onclick="showNotesPopup(this, '${booking.firmName}-${booking.startDate}')"><i class="fas fa-info"></i></button>
+                        <button class="icon-button" onclick="showNotesPopup(this, '${booking.firmName}-${booking.startDate}')"><i class="fas fa-info-circle"></i></button>
                     </td>
                 `;
                 bookingsTableBody.appendChild(bookingRow);
