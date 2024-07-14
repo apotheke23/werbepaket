@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Werbepakete Verwaltung</title>
     <style>
+        /* Dein CSS-Code bleibt hier unverändert */
         body {
             font-family: Arial, sans-serif;
         }
@@ -125,6 +126,9 @@
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-firestore.js"></script>
 </head>
 <body>
     <h1>Werbepakete Verwaltung</h1>
@@ -371,6 +375,32 @@
             });
         });
 
+        // Firebase-Konfiguration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCWrbJzdEOHD_AHDjmBtvbRzjqjfFEskFc",
+            authDomain: "werbepaket-c405e.firebaseapp.com",
+            projectId: "werbepaket-c405e",
+            storageBucket: "werbepaket-c405e.appspot.com",
+            messagingSenderId: "487343252092",
+            appId: "1:487343252092:web:be741ca3882e1c9a531ff9",
+            measurementId: "G-LQHCWYLGLR"
+        };
+
+        // Firebase initialisieren
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Funktion zum Hinzufügen einer Buchung in Firestore
+        function addBookingToFirestore(booking) {
+            db.collection("bookings").add(booking)
+                .then((docRef) => {
+                    console.log("Booking added with ID: ", docRef.id);
+                })
+                .catch((error) => {
+                    console.error("Error adding booking: ", error);
+                });
+        }
+
         function addBooking() {
             const firmName = document.getElementById('firm_name').value;
             const startDate = document.getElementById('start_date').value;
@@ -394,6 +424,21 @@
 
             const totalCost = discountedPricePerMonth * monthsRange.length;
             
+            const booking = {
+                firmName,
+                startDate,
+                endDate,
+                packageType,
+                paymentMethod,
+                paymentStatus: 'Nein',
+                pricePerMonth: discountedPricePerMonth,
+                secondsPerDay,
+                totalCost,
+                discount // Rabatt speichern
+            };
+
+            addBookingToFirestore(booking);
+
             const bookingRow = document.createElement('tr');
             bookingRow.innerHTML = `
                 <td>${firmName}</td>
@@ -425,18 +470,7 @@
                 revenuePerMonth[monthStr] += discountedPricePerMonth;
             });
 
-            allBookings.unshift({
-                firmName,
-                startDate,
-                endDate,
-                packageType,
-                paymentMethod,
-                paymentStatus: 'Nein',
-                pricePerMonth: discountedPricePerMonth,
-                secondsPerDay,
-                totalCost,
-                discount // Rabatt speichern
-            });
+            allBookings.unshift(booking);
 
             originalRevenuePerMonth = { ...revenuePerMonth };
 
